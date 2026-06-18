@@ -35,3 +35,8 @@ output "db_secret_name" {
   description = "Name of the Secrets Manager secret holding the DB credentials."
   value       = aws_secretsmanager_secret.db.name
 }
+
+output "github_actions_role_arn" {
+  description = "ARN of the role GitHub Actions assumes via OIDC. Set this as the repo Actions variable AWS_ROLE_ARN."
+  value       = aws_iam_role.github_actions.arn
+}

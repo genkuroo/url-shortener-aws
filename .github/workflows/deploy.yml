@@ -1,0 +1,73 @@
+# Phase 5 — CI/CD: build the image and deploy it to ECS on every app change.
+#
+# Auth to AWS is keyless: the `id-token` permission lets this run request a
+# short-lived GitHub OIDC token, which configure-aws-credentials exchanges for
+# temporary AWS credentials by assuming the role defined in infra/cicd.tf. No
+# AWS access keys are stored in GitHub.
+#
+# Prereqs (one-time): the stack is applied (so the role + ECR + ECS exist) and
+# the repo has an Actions *variable* AWS_ROLE_ARN set to the role's ARN
+# (terraform output github_actions_role_arn).
+
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+    paths: ["app/**"] # rebuild + redeploy only when the app changes
+  workflow_dispatch: {} # allow manual runs from the Actions tab
+
+permissions:
+  id-token: write # required to request the OIDC token
+  contents: read # required to check out the repo
+
+jobs:
+  deploy:
+    # Native ARM64 runner so the built image matches the Fargate Graviton runtime
+    # (free for public repos; avoids slow QEMU cross-building).
+    runs-on: ubuntu-24.04-arm
+
+    env:
+      AWS_REGION: us-east-1
+      ECR_REPOSITORY: url-shortener
+      ECS_CLUSTER: url-shortener-cluster
+      ECS_SERVICE: url-shortener-svc
+      IMAGE_TAG: v2 # the tag the Terraform task definition points at
+
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC, no stored keys)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Log in to Amazon ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push the image
+        env:
+          REGISTRY: ${{ steps.ecr.outputs.registry }}
+        run: |
+          IMAGE="$REGISTRY/$ECR_REPOSITORY"
+          # Tag with the rolling :v2 (what ECS pulls) AND the immutable commit
+          # SHA (for traceability / rollback).
+          docker build -t "$IMAGE:$IMAGE_TAG" -t "$IMAGE:$GITHUB_SHA" app
+          docker push "$IMAGE:$IMAGE_TAG"
+          docker push "$IMAGE:$GITHUB_SHA"
+
+      - name: Trigger a rolling ECS deployment
+        run: |
+          aws ecs update-service \
+            --cluster "$ECS_CLUSTER" \
+            --service "$ECS_SERVICE" \
+            --force-new-deployment >/dev/null
+
+      - name: Wait for the service to stabilize
+        run: |
+          aws ecs wait services-stable \
+            --cluster "$ECS_CLUSTER" \
+            --services "$ECS_SERVICE"

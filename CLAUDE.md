@@ -73,6 +73,16 @@ the ALB; created a link, clicked it, confirmed `/stats` from Postgres; then
 **forced an ECS task restart and the link + click counts survived** (proves real
 persistence, not memory). Demo data seeded via `scripts/seed_demo.py`.
 
+**Phase 5 status:** CI/CD code written & validated, **not yet applied or
+verified**. To go live: (1) `terraform apply` so the OIDC provider/role + ECR +
+ECS exist; (2) set the repo Actions variable `AWS_ROLE_ARN` to
+`terraform output github_actions_role_arn`; (3) push the workflow to GitHub;
+(4) make an `app/**` change + push to `main` → watch the Actions run build,
+push, and redeploy automatically. The deploy job only succeeds while the stack
+is up (it talks to the live ECS service). Note: the role ARN is name-based
+(`url-shortener-github-actions`), so it's stable across apply/destroy cycles —
+the `AWS_ROLE_ARN` variable doesn't need re-setting each time.
+
 To rebuild from cold (after a destroy):
 1. Build & push the app image as **`:v2`** — ARM64 (Apple Silicon → Graviton).
    `var.image_tag` defaults to `v2`. ECR is destroyed on teardown, so create it
@@ -103,7 +113,13 @@ reference, not as fixed values.
   secret (`iam.tf`). App uses Postgres + reads the secret via boto3 at startup
   (`app/main.py`); tables created on startup; demo seeder at
   `scripts/seed_demo.py`. Image `:v2`. Persistence proven across a task restart.
-- **Phase 5 — CI/CD:** ⬜ GitHub Actions, OIDC (no long-lived AWS keys).
+- **Phase 5 — CI/CD:** 🟡 Code written & `terraform validate`'d, not yet
+  applied/verified. IAM OIDC provider + a `github-actions` role scoped to this
+  repo's `main` branch, with least-privilege ECR-push + ECS-redeploy permissions
+  (`cicd.tf`, `tls` provider added). Workflow `.github/workflows/deploy.yml`:
+  on push to `main` touching `app/**` (and manual dispatch), assumes the role via
+  OIDC, builds on a native ARM64 runner, pushes `:v2` + `:<sha>`, and
+  `force-new-deployment`s the service. Needs repo Actions var `AWS_ROLE_ARN`.
 - **Phase 6 — observability:** ⬜ CloudWatch logs, dashboard, alarms.
 
 See `docs/PLAN.md` for per-phase deliverables.

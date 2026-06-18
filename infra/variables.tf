@@ -35,3 +35,15 @@ variable "db_username" {
   type        = string
   default     = "appuser"
 }
+
+variable "github_owner" {
+  description = "GitHub org/user that owns the repo allowed to deploy via OIDC."
+  type        = string
+  default     = "genkuroo"
+}
+
+variable "github_repo" {
+  description = "GitHub repo name allowed to assume the deploy role via OIDC."
+  type        = string
+  default     = "url-shortener-aws"
+}

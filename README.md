@@ -27,6 +27,7 @@ See `CLAUDE.md` for the full diagram and the deliberate cost choices
 | `infra/` | Terraform — all AWS resources (the source of truth) |
 | `app/`   | FastAPI app + Dockerfile |
 | `scripts/` | Helper scripts (e.g. `seed_demo.py` to seed demo links) |
+| `.github/workflows/` | CI/CD — GitHub Actions deploy pipeline (OIDC, keyless) |
 | `docs/PLAN.md` | The phase-by-phase build plan |
 | `CLAUDE.md` | Project guidance + phase status |
 
@@ -47,4 +48,5 @@ installed.
 ## Status
 
 Phases 1–4 built and verified on live AWS (networking, container, Fargate + ALB,
-RDS + Secrets Manager). Next up: Phase 5 (CI/CD). See `docs/PLAN.md`.
+RDS + Secrets Manager). Phase 5 (CI/CD — GitHub Actions + OIDC) written and
+validated, pending a live `apply` + test. See `docs/PLAN.md`.
