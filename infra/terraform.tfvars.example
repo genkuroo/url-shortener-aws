@@ -1,0 +1,6 @@
+# Copy this file to `terraform.tfvars` and adjust if you want non-default values.
+# terraform.tfvars is gitignored (it can hold real/sensitive values); this
+# .example template is the committed reference.
+
+region  = "us-east-1"
+project = "url-shortener"
