@@ -25,7 +25,8 @@ See `CLAUDE.md` for the full diagram and the deliberate cost choices
 | Path | What's there |
 |------|--------------|
 | `infra/` | Terraform — all AWS resources (the source of truth) |
-| `app/`   | FastAPI app + Dockerfile (added in Phase 2) |
+| `app/`   | FastAPI app + Dockerfile |
+| `scripts/` | Helper scripts (e.g. `seed_demo.py` to seed demo links) |
 | `docs/PLAN.md` | The phase-by-phase build plan |
 | `CLAUDE.md` | Project guidance + phase status |
 
@@ -45,4 +46,5 @@ installed.
 
 ## Status
 
-Phase 1 (networking) — code written, not yet applied. See `docs/PLAN.md`.
+Phases 1–4 built and verified on live AWS (networking, container, Fargate + ALB,
+RDS + Secrets Manager). Next up: Phase 5 (CI/CD). See `docs/PLAN.md`.

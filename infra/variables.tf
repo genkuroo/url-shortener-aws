@@ -19,5 +19,19 @@ variable "vpc_cidr" {
 variable "image_tag" {
   description = "ECR image tag that Fargate should run."
   type        = string
-  default     = "v1"
+  # Bumped to v2 in Phase 4: the v1 image was the in-memory build with no DB
+  # driver and would crash-loop against Postgres. Build & push the new app as v2.
+  default = "v2"
+}
+
+variable "db_name" {
+  description = "Name of the initial Postgres database created by RDS."
+  type        = string
+  default     = "urlshortener"
+}
+
+variable "db_username" {
+  description = "Master username for the Postgres database."
+  type        = string
+  default     = "appuser"
 }

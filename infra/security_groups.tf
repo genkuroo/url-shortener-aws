@@ -54,3 +54,26 @@ resource "aws_security_group" "task" {
 
   tags = { Name = "${var.project}-task-sg" }
 }
+
+# Phase 4 — Database: accept Postgres (port 5432) ONLY from the task security
+# group. This extends the chain one more hop: internet → ALB → task → db. The
+# database is unreachable from the internet (private subnets) AND from anything
+# in the VPC except the app containers.
+resource "aws_security_group" "db" {
+  name        = "${var.project}-db"
+  description = "Allow Postgres from the Fargate tasks only"
+  vpc_id      = aws_vpc.main.id
+
+  ingress {
+    description     = "Postgres from app tasks only"
+    from_port       = 5432
+    to_port         = 5432
+    protocol        = "tcp"
+    security_groups = [aws_security_group.task.id]
+  }
+
+  # No egress rules needed — the database never initiates outbound connections.
+  # (Omitting egress entirely denies all outbound, which is fine for RDS.)
+
+  tags = { Name = "${var.project}-db-sg" }
+}

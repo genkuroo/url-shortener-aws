@@ -21,6 +21,8 @@ resource "aws_ecs_task_definition" "app" {
   cpu                      = "256" # 0.25 vCPU
   memory                   = "512" # 512 MB
   execution_role_arn       = aws_iam_role.ecs_execution.arn
+  # The app runs AS this role and uses it to read the DB secret at startup.
+  task_role_arn = aws_iam_role.ecs_task.arn
 
   # Run on ARM64 (AWS Graviton). Matches the arm64 image built on Apple Silicon
   # and is ~20% cheaper than x86. Without this, Fargate defaults to x86_64 and
@@ -37,6 +39,13 @@ resource "aws_ecs_task_definition" "app" {
       essential = true
       portMappings = [
         { containerPort = 8000, protocol = "tcp" }
+      ]
+      # Tell the app which secret to read and what region to call. The app uses
+      # its task role to fetch the secret's value (the actual DB password is
+      # never passed here as plaintext — only the secret's ARN).
+      environment = [
+        { name = "DB_SECRET_ARN", value = aws_secretsmanager_secret.db.arn },
+        { name = "AWS_REGION", value = var.region }
       ]
       logConfiguration = {
         logDriver = "awslogs"
@@ -72,6 +81,13 @@ resource "aws_ecs_service" "app" {
     container_port   = 8000
   }
 
-  # Don't create the service until the listener exists.
-  depends_on = [aws_lb_listener.http]
+  # Don't start the service until everything it needs exists: the listener (so
+  # the target group is wired up), the database (so the app can connect on its
+  # first try instead of crash-looping while RDS provisions, which takes a few
+  # minutes), and the secret's value (so the app can read the credentials).
+  depends_on = [
+    aws_lb_listener.http,
+    aws_db_instance.main,
+    aws_secretsmanager_secret_version.db,
+  ]
 }

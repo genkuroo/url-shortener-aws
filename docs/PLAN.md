@@ -19,8 +19,17 @@ The five skills this whole project exists to teach:
     defaults to **x86_64** → container crashed with `exec format error`. Fixed by
     setting the task definition `runtime_platform` to **ARM64/Graviton** (also
     ~20% cheaper). Keep image + runtime architecture aligned.
-- **Next session:** rebuild Phases 1–3 (`terraform apply` + re-push image, since
-  ECR was destroyed), then start **Phase 4 (RDS + Secrets Manager)**.
+- **2026-06-18** — Phase 4 (RDS + Secrets Manager) **applied & verified** on live
+  AWS. Added `rds.tf` (Postgres in private subnets via a db subnet group),
+  `secrets.tf` (Terraform-generated password → RDS + stored as a JSON secret), db
+  security group locked to the task SG, a separate IAM **task role** scoped to
+  read only that one secret, and the `task_role_arn` + `DB_SECRET_ARN` env on the
+  task def. App (`app/main.py`) rewritten: reads the secret with boto3 at startup,
+  creates `links`/`clicks` tables, all endpoints now SQL. New
+  `scripts/seed_demo.py` seeds via the HTTP API. Image `v1→v2` (now needs
+  psycopg2 + boto3). Verified: created a link, restarted the ECS task, and the
+  link + click counts survived — real persistence. 31 resources applied.
+- **Next session:** start **Phase 5 (CI/CD — GitHub Actions + OIDC)**.
 
 ---
 
@@ -72,7 +81,7 @@ listeners, security-group chaining.
 
 ---
 
-## Phase 4 — RDS + Secrets Manager
+## Phase 4 — RDS + Secrets Manager  ✅
 Give it a real database.
 
 - RDS Postgres `db.t4g.micro` in the private subnets

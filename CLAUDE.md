@@ -61,24 +61,28 @@ project, but provider-agnostic and the industry standard.
   enforces this; `terraform.tfvars.example` is the committed template.
 - Run Terraform from inside `infra/`.
 
-## Current state (as of 2026-06-17)
+## Current state (as of 2026-06-18)
 
-**The AWS stack is fully torn down — `terraform destroy` was run, 0 resources
-live, $0 cost.** All work is captured in code (`infra/*.tf`, `app/`). Phases 1–3
-are built and verified; we stopped before Phase 4.
+**Phase 4 applied & verified, then torn down — 0 resources live, $0 cost.**
+Phases 1–4 all built and confirmed working end-to-end against live AWS, then
+`terraform destroy`'d (32 resources destroyed, state empty). All work captured in
+code.
 
-To resume next session:
-1. `cd infra && terraform apply` rebuilds Phases 1–3. **But** ECR was destroyed
-   too, so first re-push the image, or `apply` will fail to find it:
-   ```
-   cd app && docker build -t url-shortener:local .
-   # then: ecr login, tag :v1, docker push  (see README / Phase 2 steps)
-   ```
-   (Image must be **ARM64** — built on Apple Silicon — to match Graviton.)
-2. Then start **Phase 4 (RDS + Secrets Manager)**.
+**Phase 4 verification (2026-06-18):** 31 resources applied. App healthy behind
+the ALB; created a link, clicked it, confirmed `/stats` from Postgres; then
+**forced an ECS task restart and the link + click counts survived** (proves real
+persistence, not memory). Demo data seeded via `scripts/seed_demo.py`.
 
-Note: the ALB DNS name and resource IDs below are from the last apply and will
-**change** on the next apply — they're recorded for reference, not as fixed values.
+To rebuild from cold (after a destroy):
+1. Build & push the app image as **`:v2`** — ARM64 (Apple Silicon → Graviton).
+   `var.image_tag` defaults to `v2`. ECR is destroyed on teardown, so create it
+   first: `terraform apply -target=aws_ecr_repository.app`, then build/login/push.
+2. `cd infra && terraform apply` (RDS adds ~5–10 min; ECS `depends_on` the DB).
+3. Seed demo data through the live app (laptop can't reach the private DB):
+   `python scripts/seed_demo.py http://<alb-dns-name>`
+
+Note: the ALB DNS name and resource IDs change on every apply — recorded for
+reference, not as fixed values.
 
 ## Phase status
 
@@ -92,8 +96,13 @@ Note: the ALB DNS name and resource IDs below are from the last apply and will
   task:8000. Health check `/healthz`. CloudWatch log group `/ecs/url-shortener`.
   Live (while up): `http://url-shortener-alb-509002737.us-east-1.elb.amazonaws.com`.
   NOTE: image must be ARM64 to match the Graviton runtime (built on Apple Silicon).
-- **Phase 4 — RDS + Secrets Manager:** ⬜ Postgres in private subnets, creds in
-  Secrets Manager, security groups locked down.
+- **Phase 4 — RDS + Secrets Manager:** ✅ Applied & verified (2026-06-18). RDS
+  Postgres `db.t4g.micro` in private subnets (`rds.tf`), creds generated + stored
+  in Secrets Manager (`secrets.tf`), db SG locked to the task SG
+  (`security_groups.tf`), separate IAM **task role** that can read only that
+  secret (`iam.tf`). App uses Postgres + reads the secret via boto3 at startup
+  (`app/main.py`); tables created on startup; demo seeder at
+  `scripts/seed_demo.py`. Image `:v2`. Persistence proven across a task restart.
 - **Phase 5 — CI/CD:** ⬜ GitHub Actions, OIDC (no long-lived AWS keys).
 - **Phase 6 — observability:** ⬜ CloudWatch logs, dashboard, alarms.
 

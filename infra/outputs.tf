@@ -25,3 +25,13 @@ output "alb_dns_name" {
   description = "Public DNS name of the load balancer — the app's URL."
   value       = "http://${aws_lb.main.dns_name}"
 }
+
+output "db_endpoint" {
+  description = "RDS endpoint (host:port). Private — only reachable from the app."
+  value       = aws_db_instance.main.endpoint
+}
+
+output "db_secret_name" {
+  description = "Name of the Secrets Manager secret holding the DB credentials."
+  value       = aws_secretsmanager_secret.db.name
+}
