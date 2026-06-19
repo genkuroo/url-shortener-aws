@@ -63,25 +63,25 @@ project, but provider-agnostic and the industry standard.
 
 ## Current state (as of 2026-06-18)
 
-**Phase 4 applied & verified, then torn down — 0 resources live, $0 cost.**
-Phases 1–4 all built and confirmed working end-to-end against live AWS, then
-`terraform destroy`'d (32 resources destroyed, state empty). All work captured in
-code.
+**Phases 1–5 applied & verified, then torn down — 0 resources live, $0 cost.**
+All built and confirmed working end-to-end against live AWS (Phase 5 proved the
+CI/CD pipeline auto-deploys), then `terraform destroy`'d. All work captured in
+code. ⚠️ Confirm $0 before assuming idle if a session ended mid-cycle.
 
 **Phase 4 verification (2026-06-18):** 31 resources applied. App healthy behind
 the ALB; created a link, clicked it, confirmed `/stats` from Postgres; then
 **forced an ECS task restart and the link + click counts survived** (proves real
 persistence, not memory). Demo data seeded via `scripts/seed_demo.py`.
 
-**Phase 5 status:** CI/CD code written & validated, **not yet applied or
-verified**. To go live: (1) `terraform apply` so the OIDC provider/role + ECR +
-ECS exist; (2) set the repo Actions variable `AWS_ROLE_ARN` to
-`terraform output github_actions_role_arn`; (3) push the workflow to GitHub;
-(4) make an `app/**` change + push to `main` → watch the Actions run build,
-push, and redeploy automatically. The deploy job only succeeds while the stack
-is up (it talks to the live ECS service). Note: the role ARN is name-based
-(`url-shortener-github-actions`), so it's stable across apply/destroy cycles —
-the `AWS_ROLE_ARN` variable doesn't need re-setting each time.
+**Phase 5 verification (2026-06-18):** applied (34 resources, incl. OIDC
+provider + role), set the `AWS_ROLE_ARN` repo variable, pushed the workflow, then
+pushed a root-route change to `main` — the Actions run authenticated via OIDC,
+built on an ARM64 runner, pushed the image, and redeployed ECS automatically
+(root `/` 404 → JSON index, confirmed live). Then torn down. Gotcha: pushing
+`.github/workflows/*` needs the `gh`/OAuth token to have `workflow` scope
+(`gh auth refresh -h github.com -s workflow`). The deploy job only succeeds while
+the stack is up. The role ARN is name-based (`url-shortener-github-actions`), so
+it's stable across apply/destroy cycles — `AWS_ROLE_ARN` doesn't need re-setting.
 
 To rebuild from cold (after a destroy):
 1. Build & push the app image as **`:v2`** — ARM64 (Apple Silicon → Graviton).
@@ -113,13 +113,15 @@ reference, not as fixed values.
   secret (`iam.tf`). App uses Postgres + reads the secret via boto3 at startup
   (`app/main.py`); tables created on startup; demo seeder at
   `scripts/seed_demo.py`. Image `:v2`. Persistence proven across a task restart.
-- **Phase 5 — CI/CD:** 🟡 Code written & `terraform validate`'d, not yet
-  applied/verified. IAM OIDC provider + a `github-actions` role scoped to this
-  repo's `main` branch, with least-privilege ECR-push + ECS-redeploy permissions
-  (`cicd.tf`, `tls` provider added). Workflow `.github/workflows/deploy.yml`:
-  on push to `main` touching `app/**` (and manual dispatch), assumes the role via
-  OIDC, builds on a native ARM64 runner, pushes `:v2` + `:<sha>`, and
-  `force-new-deployment`s the service. Needs repo Actions var `AWS_ROLE_ARN`.
+- **Phase 5 — CI/CD:** ✅ Applied & verified (2026-06-18). IAM OIDC provider + a
+  `github-actions` role scoped to this repo's `main` branch, with least-privilege
+  ECR-push + ECS-redeploy permissions (`cicd.tf`, `tls` provider added). Workflow
+  `.github/workflows/deploy.yml`: on push to `main` touching `app/**` (and manual
+  dispatch), assumes the role via OIDC, builds on a native ARM64 runner, pushes
+  `:v2` + `:<sha>`, and `force-new-deployment`s the service. Repo Actions var
+  `AWS_ROLE_ARN` is set. **Proven:** pushing a root-route change to `main`
+  auto-deployed it (root `/` went from 404 to a JSON index) with no AWS keys in
+  GitHub. (Requires the `gh` token to have `workflow` scope to push the file.)
 - **Phase 6 — observability:** ⬜ CloudWatch logs, dashboard, alarms.
 
 See `docs/PLAN.md` for per-phase deliverables.

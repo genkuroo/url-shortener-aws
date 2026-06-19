@@ -29,17 +29,18 @@ The five skills this whole project exists to teach:
   `scripts/seed_demo.py` seeds via the HTTP API. Image `v1→v2` (now needs
   psycopg2 + boto3). Verified: created a link, restarted the ECS task, and the
   link + click counts survived — real persistence. 31 resources applied.
-- **2026-06-18** — Phase 5 (CI/CD) **written & validated** (not yet applied).
+- **2026-06-18** — Phase 5 (CI/CD) **applied & verified** on live AWS.
   `infra/cicd.tf`: IAM OIDC provider for GitHub + a `github-actions` role whose
   trust policy is locked to `repo:genkuroo/url-shortener-aws:ref:refs/heads/main`,
   with least-privilege ECR-push + ECS-redeploy permissions. Added the `tls`
   provider (thumbprint fetched dynamically). `.github/workflows/deploy.yml`:
   keyless OIDC auth, native ARM64 runner, build → push `:v2`+`:<sha>` →
   `force-new-deployment` (no task-def revision, so it never fights Terraform).
-  `terraform validate` + YAML both pass.
-- **Next session:** go live with Phase 5 — apply, set the `AWS_ROLE_ARN` repo
-  variable, push the workflow, and prove an `app/**` push to `main` auto-deploys.
-  Then **Phase 6 (observability)**.
+  Verified: pushed a root-route change to `main`, the Actions run deployed it
+  automatically (root `/` 404 → JSON index, confirmed live), no AWS keys stored.
+  Gotcha: pushing workflow files needs `gh` token `workflow` scope. Then torn
+  down to $0.
+- **Next session:** start **Phase 6 (observability)**.
 
 ---
 
@@ -108,7 +109,7 @@ roles, SQL schema/migrations.
 
 ---
 
-## Phase 5 — CI/CD (GitHub Actions + OIDC)  🟡 (written & validated, not yet applied)
+## Phase 5 — CI/CD (GitHub Actions + OIDC)  ✅
 Make deploys push-button and keyless.
 
 - GitHub repo + Actions workflow: build image → push to ECR → update ECS service

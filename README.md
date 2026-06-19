@@ -47,6 +47,6 @@ installed.
 
 ## Status
 
-Phases 1–4 built and verified on live AWS (networking, container, Fargate + ALB,
-RDS + Secrets Manager). Phase 5 (CI/CD — GitHub Actions + OIDC) written and
-validated, pending a live `apply` + test. See `docs/PLAN.md`.
+Phases 1–5 built and verified on live AWS (networking, container, Fargate + ALB,
+RDS + Secrets Manager, and a keyless GitHub Actions + OIDC deploy pipeline).
+Next up: Phase 6 (observability). See `docs/PLAN.md`.
