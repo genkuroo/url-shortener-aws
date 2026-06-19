@@ -122,6 +122,19 @@ class CreateLink(BaseModel):
     url: HttpUrl
 
 
+@app.get("/")
+def root():
+    """Friendly landing response so the root path isn't a bare 404.
+
+    Added in Phase 5 as the change that proves the CI/CD pipeline auto-deploys.
+    """
+    return {
+        "service": "url-shortener",
+        "status": "ok",
+        "endpoints": ["POST /api/links", "GET /{code}", "GET /api/links/{code}/stats"],
+    }
+
+
 @app.get("/healthz")
 def healthz():
     """Liveness probe. The load balancer hits this to check the app is alive.
