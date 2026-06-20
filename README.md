@@ -20,6 +20,19 @@ Internet → ALB → ECS Fargate (FastAPI container) → RDS Postgres (private)
 See `CLAUDE.md` for the full diagram and the deliberate cost choices
 (free-tier / tear-down: no NAT gateway, db.t4g.micro, destroy when idle).
 
+## Notable design decisions
+
+- **Runs on ARM64 / AWS Graviton** for ~20% lower compute cost. The build side
+  (Docker image + GitHub Actions runner) is kept ARM64 to match the runtime, so
+  build and run architectures stay aligned. See `CLAUDE.md` / `docs/PLAN.md` for
+  the trade-offs and how to port to x86 (or build a multi-arch image) if needed.
+- **Keyless CI/CD** — GitHub Actions authenticates to AWS via OIDC, so no
+  long-lived AWS keys are stored in GitHub.
+- **Database isolated in private subnets**, reachable only by the app's security
+  group; credentials live in Secrets Manager, never in code or the image.
+- **Everything is Terraform** — reproducible (`apply`) and disposable
+  (`destroy`), with no resources created by hand in the console.
+
 ## Layout
 
 | Path | What's there |
