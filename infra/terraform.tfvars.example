@@ -4,3 +4,7 @@
 
 region  = "us-east-1"
 project = "url-shortener"
+
+# Phase 6 — where CloudWatch alarm notifications go. Required (no default).
+# AWS emails a one-time confirmation link you must click before alerts arrive.
+alert_email = "you@example.com"

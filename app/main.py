@@ -1,8 +1,12 @@
-"""URL shortener API (FastAPI) — Phase 4: backed by Postgres.
+"""URL shortener API (FastAPI) — Postgres-backed, with structured logging.
 
-Storage is now a real Postgres database (AWS RDS in the deployed stack). Links
-and clicks survive container restarts, which they didn't in the in-memory Phase 2
+Storage is a real Postgres database (AWS RDS in the deployed stack). Links and
+clicks survive container restarts, which they didn't in the in-memory Phase 2
 version.
+
+Observability (Phase 6): a middleware writes one JSON line per request to stdout
+(method, path, status, latency). Fargate ships stdout to CloudWatch Logs, so
+those lines are queryable in CloudWatch Logs Insights.
 
 Where the database credentials come from:
   - In AWS: the container's IAM *task role* lets it read one Secrets Manager
@@ -16,20 +20,57 @@ Where the database credentials come from:
 from __future__ import annotations
 
 import json
+import logging
 import os
 import secrets
 import string
+import sys
+import time
 
 import psycopg2
 import psycopg2.extras
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import RedirectResponse
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import HTMLResponse, RedirectResponse
 from pydantic import BaseModel, HttpUrl
 
 app = FastAPI(title="URL Shortener")
 
 # Characters used to build short codes (a-z, A-Z, 0-9).
 _ALPHABET = string.ascii_letters + string.digits
+
+
+# ---------------------------------------------------------------------------
+# Structured request logging (Phase 6 — observability)
+# ---------------------------------------------------------------------------
+# One JSON object per request, written to stdout. Fargate's awslogs driver ships
+# stdout to CloudWatch Logs, where JSON is parsed automatically so you can filter
+# (e.g. `status >= 500`) in Logs Insights. Plain text would force regex parsing.
+_logger = logging.getLogger("access")
+_logger.setLevel(logging.INFO)
+_handler = logging.StreamHandler(sys.stdout)
+_handler.setFormatter(logging.Formatter("%(message)s"))  # we pre-format as JSON
+_logger.addHandler(_handler)
+_logger.propagate = False
+
+
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    """Time each request and emit a structured JSON access log line."""
+    start = time.perf_counter()
+    response = await call_next(request)
+    duration_ms = round((time.perf_counter() - start) * 1000, 1)
+    _logger.info(
+        json.dumps(
+            {
+                "event": "request",
+                "method": request.method,
+                "path": request.url.path,
+                "status": response.status_code,
+                "duration_ms": duration_ms,
+            }
+        )
+    )
+    return response
 
 
 # ---------------------------------------------------------------------------
@@ -122,17 +163,113 @@ class CreateLink(BaseModel):
     url: HttpUrl
 
 
-@app.get("/")
-def root():
-    """Friendly landing response so the root path isn't a bare 404.
+# ---------------------------------------------------------------------------
+# Web UI (Phase 7) — a lightweight front end
+# ---------------------------------------------------------------------------
+# A single self-contained HTML page (inline CSS + vanilla JS, no framework, no
+# build step, no static files). It's a thin client over the existing JSON API:
+# the form calls POST /api/links and renders the result. Kept minimal on
+# purpose — the project's focus is the infra, and this just makes the service
+# usable by a human in a browser instead of only via curl.
+_INDEX_HTML = """<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>URL Shortener</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body { font-family: system-ui, -apple-system, sans-serif; max-width: 32rem;
+           margin: 4rem auto; padding: 0 1rem; line-height: 1.5; }
+    h1 { margin-bottom: .25rem; }
+    p.sub { margin-top: 0; opacity: .7; }
+    form { display: flex; gap: .5rem; margin: 1.5rem 0; }
+    input[type=url] { flex: 1; padding: .6rem .7rem; font-size: 1rem;
+                      border: 1px solid #8888; border-radius: .4rem; }
+    button { padding: .6rem 1rem; font-size: 1rem; border: 0; border-radius: .4rem;
+             background: #2563eb; color: #fff; cursor: pointer; }
+    button:disabled { opacity: .6; cursor: progress; }
+    #result { margin-top: 1rem; padding: 1rem; border: 1px solid #8884;
+              border-radius: .5rem; display: none; }
+    #result.show { display: block; }
+    #result.error { border-color: #dc2626; }
+    .short a { font-weight: 600; font-size: 1.1rem; word-break: break-all; }
+    .long { opacity: .7; font-size: .9rem; word-break: break-all; }
+    .copy { margin-left: .5rem; padding: .25rem .6rem; font-size: .85rem;
+            background: #4b5563; }
+  </style>
+</head>
+<body>
+  <h1>URL Shortener</h1>
+  <p class="sub">Paste a long URL, get a short link.</p>
 
-    Added in Phase 5 as the change that proves the CI/CD pipeline auto-deploys.
-    """
-    return {
-        "service": "url-shortener",
-        "status": "ok",
-        "endpoints": ["POST /api/links", "GET /{code}", "GET /api/links/{code}/stats"],
+  <form id="form">
+    <input id="url" type="url" placeholder="https://example.com/very/long/link"
+           required autocomplete="off" />
+    <button id="go" type="submit">Shorten</button>
+  </form>
+
+  <div id="result"></div>
+
+  <script>
+    const form = document.getElementById('form');
+    const input = document.getElementById('url');
+    const go = document.getElementById('go');
+    const result = document.getElementById('result');
+
+    function show(html, isError) {
+      result.innerHTML = html;
+      result.className = 'show' + (isError ? ' error' : '');
     }
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      go.disabled = true;
+      show('Shortening…', false);
+      try {
+        const resp = await fetch('/api/links', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: input.value })
+        });
+        if (!resp.ok) {
+          show("That doesn't look like a valid URL. Try including http:// or https://.", true);
+          return;
+        }
+        const data = await resp.json();
+        const shortUrl = window.location.origin + data.short_url;
+        show(
+          '<div class="short">→ <a href="' + shortUrl + '" target="_blank">' + shortUrl + '</a>' +
+          '<button class="copy" type="button" id="copy">Copy</button></div>' +
+          '<div class="long">redirects to ' + data.long_url + '</div>',
+          false
+        );
+        document.getElementById('copy').addEventListener('click', () => {
+          navigator.clipboard.writeText(shortUrl);
+          document.getElementById('copy').textContent = 'Copied';
+        });
+        input.value = '';
+      } catch (err) {
+        show('Something went wrong reaching the server.', true);
+      } finally {
+        go.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>
+"""
+
+
+@app.get("/", response_class=HTMLResponse)
+def root():
+    """Serve the web UI (Phase 7).
+
+    Was a JSON index in Phase 5 (the change that proved CI/CD auto-deploys);
+    Phase 7 replaces it with an actual page a human can use in a browser. The
+    page is a thin client over POST /api/links.
+    """
+    return _INDEX_HTML
 
 
 @app.get("/healthz")

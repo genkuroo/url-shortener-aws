@@ -47,3 +47,9 @@ variable "github_repo" {
   type        = string
   default     = "url-shortener-aws"
 }
+
+variable "alert_email" {
+  description = "Email address that CloudWatch alarms notify via SNS (Phase 6). AWS sends a one-time confirmation link you must click before alerts arrive."
+  type        = string
+  # No default — set it in terraform.tfvars so a real address isn't committed.
+}

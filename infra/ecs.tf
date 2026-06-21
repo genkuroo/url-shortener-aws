@@ -1,7 +1,7 @@
 # Phase 3 — ECS Fargate (runs the container)
 
-# Where the container's stdout/logs go. Full dashboards/alarms are Phase 6;
-# this group is the minimum the task needs to emit logs.
+# Where the container's stdout/logs go. The app writes one structured JSON line
+# per request (Phase 6), so these are queryable in CloudWatch Logs Insights.
 resource "aws_cloudwatch_log_group" "app" {
   name              = "/ecs/${var.project}"
   retention_in_days = 7
@@ -10,6 +10,14 @@ resource "aws_cloudwatch_log_group" "app" {
 # A cluster is the logical grouping the service runs in.
 resource "aws_ecs_cluster" "main" {
   name = "${var.project}-cluster"
+
+  # Phase 6 — Container Insights. Turns on the richer per-service CPU, memory,
+  # and network metrics (the ECS/ContainerInsights namespace) that the
+  # monitoring dashboard reads. Off by default; this one toggle enables it.
+  setting {
+    name  = "containerInsights"
+    value = "enabled"
+  }
 }
 
 # The task definition is the blueprint for a running container: which image,

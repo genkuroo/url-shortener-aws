@@ -1,0 +1,42 @@
+# docker-compose.yml — run the whole app locally, one command, no AWS.
+#
+#   docker compose up --build     # start it (first run builds the app image)
+#   open http://127.0.0.1:8000    # use it in a browser
+#   docker compose down           # stop and remove everything
+#
+# This stands in for the AWS stack on your laptop. The "app" service is the same
+# container image Fargate runs in the cloud; the "db" service is a local Postgres
+# playing the role of RDS. The only thing swapped is where the DB password comes
+# from — here it's the DATABASE_URL below, instead of AWS Secrets Manager.
+#
+# Data is intentionally NOT persisted to a volume: each `up` is a clean slate,
+# which is what you want for testing.
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: appuser
+      POSTGRES_PASSWORD: localpw
+      POSTGRES_DB: urlshortener
+    # Compose waits for this check to pass before starting the app (see the
+    # app's depends_on below), so the app never races the database on startup.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U appuser -d urlshortener"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+
+  app:
+    build: ./app
+    environment:
+      # When DATABASE_URL is set, the app connects straight to this Postgres and
+      # makes no AWS calls — the local-dev branch in app/main.py.
+      DATABASE_URL: postgresql://appuser:localpw@db:5432/urlshortener
+    ports:
+      # Bound to 127.0.0.1 (loopback) on purpose: reachable from your browser,
+      # not from your network or the internet.
+      - "127.0.0.1:8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy

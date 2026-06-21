@@ -20,6 +20,7 @@ convention.
 A link shortener. `POST` a long URL, get back a short code; visiting the short
 URL redirects and logs a click.
 
+- `GET  /` — lightweight web UI (Phase 7): a form to shorten a URL
 - `POST /api/links` — create a short link
 - `GET  /{code}` — redirect to the long URL + record a click
 - `GET  /api/links/{code}/stats` — click count + recent hits
@@ -61,12 +62,18 @@ project, but provider-agnostic and the industry standard.
   enforces this; `terraform.tfvars.example` is the committed template.
 - Run Terraform from inside `infra/`.
 
-## Current state (as of 2026-06-18)
+## Current state (as of 2026-06-19)
 
 **Phases 1–5 applied & verified, then torn down — 0 resources live, $0 cost.**
 All built and confirmed working end-to-end against live AWS (Phase 5 proved the
 CI/CD pipeline auto-deploys), then `terraform destroy`'d. All work captured in
 code. ⚠️ Confirm $0 before assuming idle if a session ended mid-cycle.
+
+**Phase 6 (observability) built 2026-06-19 — code-complete, `terraform validate`
+passes, not yet applied to live AWS.** The app (`main.py`) changed, so the next
+apply needs a fresh `:v2` image build. Before this counts as "done" per the
+project convention, apply it and run the Phase 6 verify steps below (the
+dashboard should show live traffic and the test alarm should email you).
 
 **Phase 4 verification (2026-06-18):** 31 resources applied. App healthy behind
 the ALB; created a link, clicked it, confirmed `/stats` from Postgres; then
@@ -93,6 +100,28 @@ To rebuild from cold (after a destroy):
 
 Note: the ALB DNS name and resource IDs change on every apply — recorded for
 reference, not as fixed values.
+
+### Phase 6 verify steps (run after the next apply)
+
+Set `alert_email` first (it has no default): add `alert_email = "you@addr"` to
+`infra/terraform.tfvars`, or `export TF_VAR_alert_email=you@addr`.
+
+1. **Confirm the SNS subscription.** On the first apply AWS emails a confirmation
+   link — click it. Until then the subscription is "pending confirmation" and no
+   alerts arrive. Check with: `terraform output alerts_topic_arn`.
+2. **Generate traffic, then watch the dashboard.** Seed/click some links
+   (`python scripts/seed_demo.py http://<alb-dns>`, then hit a few `/{code}`s).
+   Open `terraform output dashboard_url` — the Requests, latency, 5xx, CPU/memory,
+   and healthy-task widgets should populate within a couple of minutes.
+3. **Confirm structured logs.** In CloudWatch Logs Insights on `/ecs/url-shortener`,
+   run `fields @timestamp, status, path, duration_ms | sort @timestamp desc` —
+   each request shows as a parsed JSON row (proves the app emits structured logs).
+4. **Test the alarm fires.** Force it into ALARM rather than waiting for a real
+   outage:
+   `aws cloudwatch set-alarm-state --alarm-name url-shortener-target-5xx --state-value ALARM --state-reason "phase 6 test"`
+   You should get the alarm email within ~1 min; CloudWatch then re-evaluates
+   against real data and (no 5xx → healthy) sends the recovery email via
+   `ok_actions`. Same trick works for `url-shortener-unhealthy-hosts`.
 
 ## Phase status
 
@@ -122,7 +151,30 @@ reference, not as fixed values.
   `AWS_ROLE_ARN` is set. **Proven:** pushing a root-route change to `main`
   auto-deployed it (root `/` went from 404 to a JSON index) with no AWS keys in
   GitHub. (Requires the `gh` token to have `workflow` scope to push the file.)
-- **Phase 6 — observability:** ⬜ CloudWatch logs, dashboard, alarms.
+- **Phase 6 — observability:** 🟡 Built in code & `terraform validate`-clean; not
+  yet applied/verified on live AWS (stack is torn down to $0). **Container
+  Insights** enabled on the cluster (`ecs.tf`). App emits **structured JSON access
+  logs** (one line/request: method, path, status, latency) via middleware
+  (`app/main.py`) — requires a fresh `:v2` image build. New `monitoring.tf`: an
+  **SNS topic + email subscription** (`var.alert_email`), two **CloudWatch
+  alarms** (app 5xx > 5/min; healthy host count < 1) wired to SNS with recovery
+  (`ok_actions`) notifications, and a **CloudWatch dashboard** graphing requests,
+  p95/avg latency, 5xx, ECS CPU/memory, and healthy-vs-unhealthy tasks. Outputs:
+  `dashboard_url`, `alerts_topic_arn`. **To verify when next applied:** see the
+  Phase 6 verify steps below.
+- **Phase 7 — web UI + local runner:** ✅ Built & tested locally (2026-06-21).
+  The app now serves a **lightweight web UI** at `/` (`GET /` returns an inline
+  self-contained HTML page — vanilla JS, no framework/build step — that calls the
+  existing `POST /api/links`; replaces the Phase 5 JSON index). So a human can
+  shorten + click links in a browser instead of only via curl. Plus a
+  **one-command local runner** so anyone can try it with **no AWS**:
+  `./scripts/run_local.sh up` (or `docker compose up --build` if the Compose
+  plugin is installed) starts the same app image + a local Postgres (standing in
+  for RDS) on `http://127.0.0.1:8000`, loopback-only. `docker-compose.yml` +
+  `scripts/run_local.sh` are two front-ends to the same setup; the script needs
+  only the Docker CLI (this machine's Colima has no Compose plugin). Deliberately
+  kept minimal — infra is still the subject; this just makes the service usable
+  and testable out of the box.
 
 See `docs/PLAN.md` for per-phase deliverables.
 

@@ -40,7 +40,32 @@ The five skills this whole project exists to teach:
   automatically (root `/` 404 → JSON index, confirmed live), no AWS keys stored.
   Gotcha: pushing workflow files needs `gh` token `workflow` scope. Then torn
   down to $0.
-- **Next session:** start **Phase 6 (observability)**.
+- **2026-06-19** — Phase 6 (observability) **built in code** (`terraform validate`
+  clean; not yet applied to live AWS). Enabled **Container Insights** on the ECS
+  cluster. Added **structured JSON access logging** to the app (`main.py`
+  middleware: one line per request with method/path/status/latency → CloudWatch
+  Logs Insights). New `infra/monitoring.tf`: **SNS topic + email subscription**
+  (`var.alert_email`, no default so no address is committed), two **CloudWatch
+  alarms** (app 5xx > 5/min; healthy host count < 1) publishing to SNS with
+  `ok_actions` recovery notifications, and a **CloudWatch dashboard** (requests,
+  p95/avg latency, 5xx, ECS CPU/mem, healthy-vs-unhealthy tasks). New outputs:
+  `dashboard_url`, `alerts_topic_arn`. App change means the next apply needs a
+  fresh `:v2` build. **Verify-when-applied** steps (incl. forcing the alarm into
+  ALARM via `aws cloudwatch set-alarm-state` to test the email path) are in
+  `CLAUDE.md`.
+- **2026-06-21** — Phase 7 (web UI + local runner) **built & tested locally.**
+  `app/main.py` now serves a lightweight inline HTML page at `/` (vanilla JS, no
+  framework/build step) that calls the existing `POST /api/links` — replacing the
+  Phase 5 JSON index, so a human can use the shortener in a browser. Added a
+  **one-command local runner** that needs no AWS: `docker-compose.yml` and
+  `scripts/run_local.sh up` both stand up the same app image + a local Postgres
+  (in for RDS) on `http://127.0.0.1:8000`, loopback-only. Verified end-to-end
+  locally: page serves, form creates a link, redirect works, invalid URL → 422.
+  (This machine's Colima has no Compose plugin, hence the shell-script runner as
+  the no-install path.)
+- **Next session:** apply Phase 6 to live AWS and run its verify steps (dashboard
+  shows live traffic; test alarm emails you), then tear down. That closes the
+  five-skill arc: **Terraform · containers · VPC · CI/CD · observability.**
 
 ---
 
@@ -123,19 +148,44 @@ no AWS credentials stored in GitHub secrets.
 
 ---
 
-## Phase 6 — Observability
+## Phase 6 — Observability  🟡 (built in code; apply + verify pending)
 Be able to tell when it's healthy.
 
-- CloudWatch log group for the Fargate tasks; structured app logs
-- ECS Container Insights enabled
-- A CloudWatch dashboard (request count, latency, 5xx, CPU/memory)
-- An alarm (e.g., 5xx rate or unhealthy host count) → SNS email
+- CloudWatch log group for the Fargate tasks; structured app logs ✅
+- ECS Container Insights enabled ✅
+- A CloudWatch dashboard (request count, latency, 5xx, CPU/memory) ✅
+- An alarm (e.g., 5xx rate or unhealthy host count) → SNS email ✅
 
 **Done when:** the dashboard shows live traffic when you click links, and the
-alarm fires (test it) to your email.
+alarm fires (test it) to your email. ← code is ready; this last live check is the
+only thing outstanding (needs an apply, which costs money, so it's left for a
+deliberate session — steps in `CLAUDE.md`).
 
 **New concepts:** CloudWatch logs/metrics/dashboards/alarms, SNS, Container
 Insights.
+
+---
+
+## Phase 7 — Web UI + local runner  ✅
+Make it usable by a human, and testable without AWS.
+
+- A lightweight web UI at `/`: a form to paste a long URL and get a short link
+  back (inline HTML + vanilla JS, no framework, no build step). Thin client over
+  the existing `POST /api/links`.
+- A one-command local runner so anyone can try it with no AWS account:
+  `docker-compose.yml` and `scripts/run_local.sh` both run the same app image +
+  a local Postgres (standing in for RDS) on `http://127.0.0.1:8000`.
+
+**Done when:** `./scripts/run_local.sh up` (or `docker compose up --build`) brings
+the app up locally and you can shorten a link in the browser and follow it. ✅
+
+**New concepts:** serving a front end from the API, Docker Compose / multi-
+container local dev, the local-vs-cloud config seam (`DATABASE_URL` vs. Secrets
+Manager).
+
+**Scope note:** intentionally minimal. This is an infra project; the UI exists to
+make the service usable and demoable, not to be a polished product. HTTPS + a
+custom short domain (below) is what it would take to run this publicly for real.
 
 ---
 

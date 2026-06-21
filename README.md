@@ -11,6 +11,22 @@ The app is small on purpose. The infrastructure is the point.
 `POST` a long URL, get a short code back. Visiting the short URL redirects to the
 original and logs the click. FastAPI (Python) in a container, backed by Postgres.
 
+## Try it locally (no AWS)
+
+The app is designed to run without any cloud account — it reads its database
+connection from a `DATABASE_URL` env var instead of AWS Secrets Manager when one
+is present. One command stands up the same container image plus a local Postgres
+(standing in for RDS), bound to loopback only:
+
+```bash
+./scripts/run_local.sh up         # build + start → http://127.0.0.1:8000
+./scripts/run_local.sh down       # stop + remove everything
+```
+
+Then open <http://127.0.0.1:8000> and shorten a link in the browser. If you have
+the Docker Compose plugin, `docker compose up --build` does the same thing
+(`docker-compose.yml`). Requires only Docker (e.g. Colima or Docker Desktop).
+
 ## Architecture
 
 ```
@@ -39,7 +55,8 @@ See `CLAUDE.md` for the full diagram and the deliberate cost choices
 |------|--------------|
 | `infra/` | Terraform — all AWS resources (the source of truth) |
 | `app/`   | FastAPI app + Dockerfile |
-| `scripts/` | Helper scripts (e.g. `seed_demo.py` to seed demo links) |
+| `scripts/` | Helper scripts (`run_local.sh` to run it locally, `seed_demo.py` to seed demo links) |
+| `docker-compose.yml` | One-command local run (app + Postgres), no AWS |
 | `.github/workflows/` | CI/CD — GitHub Actions deploy pipeline (OIDC, keyless) |
 | `docs/PLAN.md` | The phase-by-phase build plan |
 | `CLAUDE.md` | Project guidance + phase status |
@@ -62,4 +79,6 @@ installed.
 
 Phases 1–5 built and verified on live AWS (networking, container, Fargate + ALB,
 RDS + Secrets Manager, and a keyless GitHub Actions + OIDC deploy pipeline).
-Next up: Phase 6 (observability). See `docs/PLAN.md`.
+Phase 6 (observability — CloudWatch dashboard, alarms, structured logs) is built
+and `terraform validate`-clean, pending a live apply. Phase 7 added a lightweight
+web UI and a one-command local runner (above). See `docs/PLAN.md`.

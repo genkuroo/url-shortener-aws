@@ -40,3 +40,13 @@ output "github_actions_role_arn" {
   description = "ARN of the role GitHub Actions assumes via OIDC. Set this as the repo Actions variable AWS_ROLE_ARN."
   value       = aws_iam_role.github_actions.arn
 }
+
+output "dashboard_url" {
+  description = "Direct link to the Phase 6 CloudWatch dashboard."
+  value       = "https://${var.region}.console.aws.amazon.com/cloudwatch/home?region=${var.region}#dashboards/dashboard/${aws_cloudwatch_dashboard.main.dashboard_name}"
+}
+
+output "alerts_topic_arn" {
+  description = "ARN of the SNS topic CloudWatch alarms publish to."
+  value       = aws_sns_topic.alerts.arn
+}
