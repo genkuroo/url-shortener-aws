@@ -62,18 +62,20 @@ project, but provider-agnostic and the industry standard.
   enforces this; `terraform.tfvars.example` is the committed template.
 - Run Terraform from inside `infra/`.
 
-## Current state (as of 2026-06-19)
+## Current state (as of 2026-06-22)
 
-**Phases 1–5 applied & verified, then torn down — 0 resources live, $0 cost.**
-All built and confirmed working end-to-end against live AWS (Phase 5 proved the
-CI/CD pipeline auto-deploys), then `terraform destroy`'d. All work captured in
-code. ⚠️ Confirm $0 before assuming idle if a session ended mid-cycle.
+**Phases 1–7 applied/built & verified, then torn down — 0 resources live, $0 cost.**
+All core phases confirmed working end-to-end against live AWS, then
+`terraform destroy`'d. All work captured in code. ⚠️ Confirm $0 before assuming
+idle if a session ended mid-cycle.
 
-**Phase 6 (observability) built 2026-06-19 — code-complete, `terraform validate`
-passes, not yet applied to live AWS.** The app (`main.py`) changed, so the next
-apply needs a fresh `:v2` image build. Before this counts as "done" per the
-project convention, apply it and run the Phase 6 verify steps below (the
-dashboard should show live traffic and the test alarm should email you).
+**Phase 6 (observability) applied & verified live 2026-06-22**, then torn down —
+dashboard showed live metrics, structured JSON logs confirmed, and the 5xx alarm
+fired + recovered through SNS (alarm history shows the action executed). One
+caveat: the SNS **email** subscription never confirmed (the AWS confirmation
+email never reached Gmail despite two resends), so the final SNS→inbox delivery
+wasn't observed — see the Phase 6 status entry for details. Phase 7 (web UI +
+local runner) built & tested locally and pushed to GitHub.
 
 **Phase 4 verification (2026-06-18):** 31 resources applied. App healthy behind
 the ALB; created a link, clicked it, confirmed `/stats` from Postgres; then
@@ -151,17 +153,26 @@ Set `alert_email` first (it has no default): add `alert_email = "you@addr"` to
   `AWS_ROLE_ARN` is set. **Proven:** pushing a root-route change to `main`
   auto-deployed it (root `/` went from 404 to a JSON index) with no AWS keys in
   GitHub. (Requires the `gh` token to have `workflow` scope to push the file.)
-- **Phase 6 — observability:** 🟡 Built in code & `terraform validate`-clean; not
-  yet applied/verified on live AWS (stack is torn down to $0). **Container
-  Insights** enabled on the cluster (`ecs.tf`). App emits **structured JSON access
-  logs** (one line/request: method, path, status, latency) via middleware
-  (`app/main.py`) — requires a fresh `:v2` image build. New `monitoring.tf`: an
-  **SNS topic + email subscription** (`var.alert_email`), two **CloudWatch
+- **Phase 6 — observability:** ✅ Applied & verified on live AWS (2026-06-22),
+  then torn down. **Container Insights** enabled on the cluster (`ecs.tf`). App
+  emits **structured JSON access logs** (one line/request: method, path, status,
+  latency) via middleware (`app/main.py`); image rebuilt as `:v2`. `monitoring.tf`:
+  an **SNS topic + email subscription** (`var.alert_email`), two **CloudWatch
   alarms** (app 5xx > 5/min; healthy host count < 1) wired to SNS with recovery
   (`ok_actions`) notifications, and a **CloudWatch dashboard** graphing requests,
   p95/avg latency, 5xx, ECS CPU/memory, and healthy-vs-unhealthy tasks. Outputs:
-  `dashboard_url`, `alerts_topic_arn`. **To verify when next applied:** see the
-  Phase 6 verify steps below.
+  `dashboard_url`, `alerts_topic_arn`. **Verified (2026-06-22):** 39 resources
+  applied; seeded + generated ~100 reqs of traffic; confirmed structured JSON
+  logs in CloudWatch (real 201 creates + 307 redirects) and live dashboard
+  metrics (ALB RequestCount, etc.); forced `target-5xx` into ALARM and the alarm
+  history showed **"Successfully executed action … url-shortener-alerts"** on both
+  the ALARM and the OK (recovery) transitions — the alarm→SNS chain works.
+  ⚠️ **Caveat:** the SNS email subscription never confirmed — AWS reported it
+  delivered the confirmation email but it never arrived in Gmail (not in inbox /
+  Promotions / Spam) even after two resends, so the final SNS→inbox hop was not
+  observed end-to-end. Likely a Gmail-side block on `sns.amazonaws.com`; unrelated
+  to the IaC. Next time: confirm the subscription (or try a non-Gmail address /
+  swap the protocol) to see the actual alert email land. Verify steps below.
 - **Phase 7 — web UI + local runner:** ✅ Built & tested locally (2026-06-21).
   The app now serves a **lightweight web UI** at `/` (`GET /` returns an inline
   self-contained HTML page — vanilla JS, no framework/build step — that calls the

@@ -63,9 +63,23 @@ The five skills this whole project exists to teach:
   locally: page serves, form creates a link, redirect works, invalid URL → 422.
   (This machine's Colima has no Compose plugin, hence the shell-script runner as
   the no-install path.)
-- **Next session:** apply Phase 6 to live AWS and run its verify steps (dashboard
-  shows live traffic; test alarm emails you), then tear down. That closes the
-  five-skill arc: **Terraform · containers · VPC · CI/CD · observability.**
+- **2026-06-22** — Phase 6 (observability) **applied & verified on live AWS**,
+  then torn down to $0. Rebuilt the `:v2` image (with the Phase 6 logging + Phase
+  7 UI), applied 39 resources, seeded + generated ~100 requests of traffic.
+  Confirmed: **structured JSON logs** in CloudWatch (real 201 creates + 307
+  redirects, with `duration_ms`), live **dashboard** metrics (ALB RequestCount et
+  al.), and the **5xx alarm** fired + recovered — alarm history shows
+  "Successfully executed action … url-shortener-alerts" on both the ALARM and OK
+  transitions, proving the alarm→SNS chain. ⚠️ The SNS **email** subscription
+  never confirmed: AWS reported the confirmation email sent, but it never reached
+  Gmail (inbox/Promotions/Spam) even after two resends — likely a Gmail block on
+  `sns.amazonaws.com`. So the final SNS→inbox delivery wasn't observed; everything
+  up to the SNS publish was. This **closes the five-skill arc:
+  Terraform · containers · VPC · CI/CD · observability.**
+- **Next session (optional):** confirm the SNS subscription (or use a non-Gmail
+  address / different protocol) to watch the actual alert email land; gate the
+  deploy workflow so down-stack pushes skip instead of fail; or pick an item from
+  "Later / optional upgrades" below (remote state, HTTPS + domain, autoscaling).
 
 ---
 
@@ -148,7 +162,7 @@ no AWS credentials stored in GitHub secrets.
 
 ---
 
-## Phase 6 — Observability  🟡 (built in code; apply + verify pending)
+## Phase 6 — Observability  ✅ (applied & verified live 2026-06-22)
 Be able to tell when it's healthy.
 
 - CloudWatch log group for the Fargate tasks; structured app logs ✅
@@ -157,9 +171,11 @@ Be able to tell when it's healthy.
 - An alarm (e.g., 5xx rate or unhealthy host count) → SNS email ✅
 
 **Done when:** the dashboard shows live traffic when you click links, and the
-alarm fires (test it) to your email. ← code is ready; this last live check is the
-only thing outstanding (needs an apply, which costs money, so it's left for a
-deliberate session — steps in `CLAUDE.md`).
+alarm fires (test it) to your email. ✅ Verified live 2026-06-22: dashboard +
+structured logs confirmed, and the 5xx alarm fired + recovered through SNS. The
+one unobserved bit is the SNS→**inbox** email hop — the AWS confirmation email
+never reached Gmail, so the subscription stayed unconfirmed (see progress log /
+`CLAUDE.md`). The alarm→SNS publish itself was proven via the alarm history.
 
 **New concepts:** CloudWatch logs/metrics/dashboards/alarms, SNS, Container
 Insights.

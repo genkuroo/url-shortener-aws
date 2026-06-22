@@ -82,8 +82,9 @@ installed.
 
 ## Status
 
-Phases 1–5 built and verified on live AWS (networking, container, Fargate + ALB,
-RDS + Secrets Manager, and a keyless GitHub Actions + OIDC deploy pipeline).
-Phase 6 (observability — CloudWatch dashboard, alarms, structured logs) is built
-and `terraform validate`-clean, pending a live apply. Phase 7 added a lightweight
-web UI and a one-command local runner (above). See `docs/PLAN.md`.
+Phases 1–6 built and verified on live AWS (networking, container, Fargate + ALB,
+RDS + Secrets Manager, a keyless GitHub Actions + OIDC deploy pipeline, and
+observability — CloudWatch dashboard, structured logs, and alarms that fire and
+recover through SNS). Phase 7 added a lightweight web UI and a one-command local
+runner (above). Built to be stood up and torn down on demand — $0 when idle.
+See `docs/PLAN.md`.
