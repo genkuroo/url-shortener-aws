@@ -27,6 +27,11 @@ Then open <http://127.0.0.1:8000> and shorten a link in the browser. If you have
 the Docker Compose plugin, `docker compose up --build` does the same thing
 (`docker-compose.yml`). Requires only Docker (e.g. Colima or Docker Desktop).
 
+The lightweight web UI (Phase 7) — paste a URL, get a short link back:
+
+![The shortener's web UI with a form](docs/img/ui-form.png)
+![A shortened link result, redirecting to wikipedia.org](docs/img/ui-result.png)
+
 ## Architecture
 
 ```
